@@ -171,11 +171,6 @@ namespace ProjektDES
 
                                         var inputData = LoadFromFile(inputFile);
                                         Encode(inputData, Key);
-                                        //foreach (bool b in inputData)
-                                        //{
-                                        //    Console.WriteLine(b);
-                                        //}
-                                        //  SaveFile(Encoding.ASCII.GetBytes(out1.ToString()), outputFile);
 
                                         Console.WriteLine("\nWynik został zapisany do pliku");
                                     }
@@ -240,7 +235,8 @@ namespace ProjektDES
         private static void Encode(BitArray data, BitArray key)
         {
             var chunkedData = Chunk(data); //chunk for 64-bit data
-            var schedule = KeySchedule(key); //
+            chunkedData.Add(CalculateAddedBits());
+            var schedule = KeySchedule(key);
 
             var results = new List<BitArray>();
 
@@ -260,13 +256,35 @@ namespace ProjektDES
                         Left = lastRight,
                         Right = xor(lastLeft, F(splittedTo32bits.Right, schedule[i + 1]))
                     };
-
                 }
 
                 var joined = Concat(splittedTo32bits.Right, splittedTo32bits.Left);
                 results.Add(Permutate(joined, Ipinv, 64));
                 Log(results[index], index.ToString());
             }
+        }
+
+        private static BitArray CalculateAddedBits()
+        {
+            var result = new bool[64];
+
+            string binary = Convert.ToString(_extraBitsAdded.Count, 2);
+
+            var index = binary.Length - 1;
+
+            for (int i = 63; i > 0; i--)
+            {
+                if (binary[index] == '0')
+                    result[i] = false;
+                else if (binary[index] == '1')
+                    result[i] = true;
+
+                index--;
+                if (index < 0)
+                    break;
+            }
+
+            return new BitArray(result);
         }
 
         private static void Decode(BitArray data, BitArray key)
@@ -298,6 +316,38 @@ namespace ProjektDES
                 results.Add(Permutate(joined, Ipinv, 64));
                 Log(results[index], index.ToString());
             }
+
+            results = CutExtraBits(results);
+
+            foreach (var item in results)
+            {
+                Log(item);
+            }
+        }
+
+        private static List<BitArray> CutExtraBits(List<BitArray> results)
+        {
+            int addedExtraBits = 0;
+            var bitArray = results[results.Count - 1];
+
+            for (int i = 0; i < bitArray.Count; i++)
+            {
+                if (bitArray[i])
+                    addedExtraBits += Convert.ToInt32(Math.Pow(2, bitArray.Count - 1 - i));
+            }
+
+            var lastArray = new List<bool>();
+
+            for (int i = 0; i < 64 - addedExtraBits; i++)
+            {
+                lastArray.Add(results[results.Count - 2][i]);
+            }
+
+            results.RemoveAt(results.Count - 1);
+            results.RemoveAt(results.Count - 1);
+            results.Add(new BitArray(lastArray.ToArray()));
+
+            return results;
         }
 
         private static BitArray F(BitArray right, BitArray key)
@@ -596,7 +646,7 @@ namespace ProjektDES
             Debug.Write("\n");
         }
 
-      
+
         private struct Pair
         {
             public BitArray Left { get; set; }
