@@ -138,26 +138,27 @@ namespace ProjektDES
 
         private static readonly int[] LeftShifts = { 1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1 };
 
-        private static BitArray Key;
+        private static BitArray _key;
 
         static void Main(string[] args)
         {
-            Console.WriteLine("1-Plik \n2-Konsola");
+            Console.WriteLine("1-Plik binarny \n2-Konsola\n3-Plik");
             var c = Console.ReadKey();
+            Console.WriteLine(Environment.NewLine);
 
             using (var file = new StreamReader("key.txt"))
             {
-                Key = GetBitArrayFromInput(file.ReadLine());
+                _key = GetBitArrayFromInput(file.ReadLine());
             }
 
-            while (c.KeyChar != '3')
+            while (c.KeyChar != '4')
             {
                 Console.WriteLine("1 - ENCODE \n2 - DECODE\n\n");
                 var choose = Console.ReadKey();
                 switch (c.KeyChar)
                 {
 
-                    case '1':
+                    case '1': // Plik binarny
                         while (choose.KeyChar != '3')
                         {
                             switch (choose.KeyChar)
@@ -170,8 +171,9 @@ namespace ProjektDES
                                         var outputFile = Console.ReadLine();
 
                                         var inputData = LoadFromFile(inputFile);
-                                        Encode(inputData, Key);
+                                        var data = Encode(inputData, _key);
 
+                                        SaveAsBinary(outputFile, data);
                                         Console.WriteLine("\nWynik został zapisany do pliku");
                                     }
                                     break;
@@ -182,7 +184,9 @@ namespace ProjektDES
                                         Console.WriteLine("\nPodaj nazwę pliku wyjściowego");
                                         var outputFile = Console.ReadLine();
 
-                                        //decode
+                                        var inputData = LoadFromFile(inputFile);
+                                        var data = Decode(inputData, _key);
+                                        SaveAsBinary(outputFile, data);
                                         Console.WriteLine("\n Wynik został zapisany do pliku");
                                     }
                                     break;
@@ -195,7 +199,7 @@ namespace ProjektDES
                         }
                         break;
 
-                    case '2':
+                    case '2': //konsola
                         while (choose.KeyChar != '3')
                         {
                             switch (choose.KeyChar)
@@ -206,7 +210,7 @@ namespace ProjektDES
                                         var inputdata = Console.ReadLine();
 
                                         BitArray data = GetBitArrayFromInput(inputdata);
-                                        Encode(data, Key);
+                                        Encode(data, _key);
                                     }
                                     break;
                                 case '2':
@@ -215,7 +219,46 @@ namespace ProjektDES
                                         var inputdata = Console.ReadLine();
 
                                         BitArray data = GetBitArrayFromInput(inputdata);
-                                        Decode(data, Key);
+                                        Decode(data, _key);
+                                    }
+                                    break;
+                                default:
+                                    {
+                                    }
+                                    break;
+                            }
+                            choose = Console.ReadKey();
+                        }
+                        break;
+                    case '3': //plik
+                        while (choose.KeyChar != '3')
+                        {
+                            switch (choose.KeyChar)
+                            {
+                                case '1':
+                                    {
+                                        Console.WriteLine("\nPodaj nazwę pliku wejsciowego");
+                                        var inputFile = Console.ReadLine();
+                                        Console.WriteLine("\nPodaj nazwę pliku wyjściowego");
+                                        var outputFile = Console.ReadLine();
+
+                                        BitArray data = LoadContentFromFile(inputFile);
+                                        var result=Encode(data, _key);
+
+                                        SaveContentToFile(result,outputFile);
+                                    }
+                                    break;
+                                case '2':
+                                    {
+                                        Console.WriteLine("\nPodaj nazwę pliku wejsciowego");
+                                        var inputFile = Console.ReadLine();
+                                        Console.WriteLine("\nPodaj nazwę pliku wyjściowego");
+                                        var outputFile = Console.ReadLine();
+
+                                        BitArray data = LoadContentFromFile(inputFile);
+                                        var result = Decode(data, _key);
+
+                                        SaveContentToFile(result, outputFile);
                                     }
                                     break;
                                 default:
@@ -232,7 +275,47 @@ namespace ProjektDES
             Console.ReadKey();
         }
 
-        private static void Encode(BitArray data, BitArray key)
+        private static void SaveContentToFile(BitArray data,string path)
+        {
+            using (var writetext = new StreamWriter(path))
+            {
+                foreach (bool b in data)
+                {
+                    var cToWrite=(b)?'1':'0';
+                   writetext.Write(cToWrite);
+                }
+            }
+        }
+
+        private static BitArray LoadContentFromFile(string path)
+        {
+            var data = File.ReadAllLines(path);
+            var boolArr = new List<bool>();
+            foreach (var s in data)
+            {
+                foreach (char c in s)
+                {
+                    if (c == '1')
+                    {
+                        boolArr.Add(true);
+                    }
+                    else if (c == '0')
+                    {
+                        boolArr.Add(false);
+                    }
+                }
+            }
+            return  new BitArray(boolArr.ToArray());
+        }
+
+        private static void SaveAsBinary(string path, BitArray data)
+        {
+            byte[] bytes = new byte[data.Length / 8 + (data.Length % 8 == 0 ? 0 : 1)];
+            data.CopyTo(bytes, 0);
+            File.WriteAllBytes(path, bytes);
+        }
+
+        private static BitArray Encode(BitArray data, BitArray key)
         {
             var chunkedData = Chunk(data); //chunk for 64-bit data
             chunkedData.Add(CalculateAddedBits());
@@ -245,23 +328,36 @@ namespace ProjektDES
                 var bitArray = chunkedData[index];
                 bitArray = Permutate(bitArray, Ip, 64);
 
-                var splittedTo32bits = SplitToTwoPieces(bitArray);
+                var splittedTo32Bits = SplitToTwoPieces(bitArray);
 
                 for (int i = 0; i < 16; i++)
                 {
-                    var lastLeft = splittedTo32bits.Left;
-                    var lastRight = splittedTo32bits.Right;
-                    splittedTo32bits = new Pair
+                    var lastLeft = splittedTo32Bits.Left;
+                    var lastRight = splittedTo32Bits.Right;
+                    splittedTo32Bits = new Pair
                     {
                         Left = lastRight,
-                        Right = xor(lastLeft, F(splittedTo32bits.Right, schedule[i + 1]))
+                        Right = Xor(lastLeft, F(splittedTo32Bits.Right, schedule[i + 1]))
                     };
                 }
 
-                var joined = Concat(splittedTo32bits.Right, splittedTo32bits.Left);
+                var joined = Concat(splittedTo32Bits.Right, splittedTo32Bits.Left);
                 results.Add(Permutate(joined, Ipinv, 64));
-                Log(results[index], index.ToString());
+                //Log(results[index], index.ToString());
             }
+            return ConcatBitArrays(results);
+        }
+
+        private static BitArray ConcatBitArrays(List<BitArray> results)
+        {
+            var res = results[0];
+
+            for (var index = 1; index < results.Count; index++)
+            {
+                var bitArray = results[index];
+                res = res.Append(bitArray);
+            }
+            return res;
         }
 
         private static BitArray CalculateAddedBits()
@@ -287,7 +383,7 @@ namespace ProjektDES
             return new BitArray(result);
         }
 
-        private static void Decode(BitArray data, BitArray key)
+        private static BitArray Decode(BitArray data, BitArray key)
         {
             var chunkedData = Chunk(data); //chunk for 64-bit data
             var schedule = KeySchedule(key); //
@@ -299,30 +395,32 @@ namespace ProjektDES
                 var bitArray = chunkedData[index];
                 bitArray = Permutate(bitArray, Ip, 64);
 
-                var splittedTo32bits = SplitToTwoPieces(bitArray);
+                var splittedTo32Bits = SplitToTwoPieces(bitArray);
 
                 for (int i = 16; i >= 1; i--)
                 {
-                    var lastLeft = splittedTo32bits.Left;
-                    var lastRight = splittedTo32bits.Right;
-                    splittedTo32bits = new Pair
+                    var lastLeft = splittedTo32Bits.Left;
+                    var lastRight = splittedTo32Bits.Right;
+                    splittedTo32Bits = new Pair
                     {
                         Left = lastRight,
-                        Right = xor(lastLeft, F(splittedTo32bits.Right, schedule[i]))
+                        Right = Xor(lastLeft, F(splittedTo32Bits.Right, schedule[i]))
                     };
                 }
 
-                var joined = Concat(splittedTo32bits.Right, splittedTo32bits.Left);
+                var joined = Concat(splittedTo32Bits.Right, splittedTo32Bits.Left);
                 results.Add(Permutate(joined, Ipinv, 64));
-                Log(results[index], index.ToString());
+
+               // Log(results[index], index.ToString());
             }
 
             results = CutExtraBits(results);
 
-            foreach (var item in results)
-            {
-                Log(item);
-            }
+            //foreach (var item in results)
+            //{
+            //    Log(item);
+            //}
+            return ConcatBitArrays(results);
         }
 
         private static List<BitArray> CutExtraBits(List<BitArray> results)
@@ -353,7 +451,7 @@ namespace ProjektDES
         private static BitArray F(BitArray right, BitArray key)
         {
             var e = Permutate(right, E, 48);
-            var x = xor(e, key); //pkt 9
+            var x = Xor(e, key); //pkt 9
 
             var bs = Split(x);
 
@@ -374,42 +472,32 @@ namespace ProjektDES
 
         private static BitArray MergeListOfBitArrays(List<BitArray> list)
         {
-            var result = new List<bool>();
-
-            foreach (var bitArray in list)
-            {
-                foreach (bool item in bitArray)
-                {
-                    result.Add(item);
-                }
-            }
-
-            return new BitArray(result.ToArray());
+            return new BitArray(list.SelectMany(bitArray => bitArray.Cast<bool>()).ToArray());
         }
 
         private static BitArray SBoxLookup(BitArray bitArray, int sbox)
         {
-            var Row = 0;
-            var Col = 0;
+            var row = 0;
+            var col = 0;
             //Log(bitArray, "sbox");
 
             for (int i = 0; i < bitArray.Length; i++)
             {
                 if (bitArray[i] && i == 0)
-                    Row += Convert.ToInt16(Math.Pow(2, 1));
+                    row += Convert.ToInt16(Math.Pow(2, 1));
                 else if (bitArray[i] && i == 5)
-                    Row += Convert.ToInt16(Math.Pow(2, 0));
+                    row += Convert.ToInt16(Math.Pow(2, 0));
                 else if (bitArray[i] && i == 4)
-                    Col += Convert.ToInt16(Math.Pow(2, 0));
+                    col += Convert.ToInt16(Math.Pow(2, 0));
                 else if (bitArray[i] && i == 3)
-                    Col += Convert.ToInt16(Math.Pow(2, 1));
+                    col += Convert.ToInt16(Math.Pow(2, 1));
                 else if (bitArray[i] && i == 2)
-                    Col += Convert.ToInt16(Math.Pow(2, 2));
+                    col += Convert.ToInt16(Math.Pow(2, 2));
                 else if (bitArray[i] && i == 1)
-                    Col += Convert.ToInt16(Math.Pow(2, 3));
+                    col += Convert.ToInt16(Math.Pow(2, 3));
             }
 
-            var index = Row == 0 ? Col : (Row * 16) + Col;
+            var index = row == 0 ? col : (row * 16) + col;
 
             var array = (new byte[] { SBoxes[sbox, index] });
 
@@ -422,10 +510,7 @@ namespace ProjektDES
 
             for (int i = 3; i >= 0; i--)
             {
-                if (array[i])
-                    result.Add(true);
-                else
-                    result.Add(false);
+                result.Add(array[i]);
             }
 
             return new BitArray(result.ToArray());
@@ -438,8 +523,7 @@ namespace ProjektDES
 
             var keySplittedTo28Bits = SplitToTwoPieces(key56);
 
-            var schedule = new List<Pair>();
-            schedule.Add(keySplittedTo28Bits);
+            var schedule = new List<Pair> { keySplittedTo28Bits };
 
             for (int i = 1; i <= LeftShifts.Count(); i++)
             {
@@ -463,17 +547,8 @@ namespace ProjektDES
 
         private static BitArray Concat(BitArray left, BitArray right)
         {
-            var result = new List<bool>();
-
-            foreach (bool item in left)
-            {
-                result.Add(item);
-            }
-
-            foreach (bool item in right)
-            {
-                result.Add(item);
-            }
+            var result = left.Cast<bool>().ToList();
+            result.AddRange(right.Cast<bool>());
 
             return new BitArray(result.ToArray());
         }
@@ -611,7 +686,7 @@ namespace ProjektDES
             return result;
         }
 
-        private static BitArray xor(BitArray e, BitArray key)
+        private static BitArray Xor(BitArray e, BitArray key)
         {
             var result = new List<bool>();
 
@@ -634,14 +709,7 @@ namespace ProjektDES
             Debug.Write(message + "\n");
             foreach (bool item in array)
             {
-                if (item)
-                {
-                    Debug.Write("1");
-                }
-                else
-                {
-                    Debug.Write("0");
-                }
+                Debug.Write(item ? "1" : "0");
             }
             Debug.Write("\n");
         }
@@ -652,6 +720,12 @@ namespace ProjektDES
             public BitArray Left { get; set; }
             public BitArray Right { get; set; }
         }
-
+        public static BitArray Append(BitArray current, BitArray after)
+        {
+            var bools = new bool[current.Count + after.Count];
+            current.CopyTo(bools, 0);
+            after.CopyTo(bools, current.Count);
+            return new BitArray(bools);
+        }
     }
 }
